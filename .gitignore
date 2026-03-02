@@ -1,0 +1,47 @@
+# Dependency directories
+node_modules/
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+.build/
+dist/
+build/
+*.o
+*.a
+*.so
+
+# Swift / Xcode
+.swiftpm/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# Cache
+__pycache__/
+*.pyc
+.pytest_cache/
+.cache/
+
+# Misc
+*.tmp
+archived/
