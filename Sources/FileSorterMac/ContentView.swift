@@ -7,6 +7,12 @@ struct ContentView: View {
 
     @State private var keyMonitor: Any?
     @State private var pendingCreateFolder: String?
+    @State private var newPersonName: String = ""
+    @State private var manualPersonTagInput: String = ""
+    @State private var editingPersonName: String?
+    @State private var editingPersonValue: String = ""
+    @State private var pendingDeletePersonName: String?
+    @State private var showDeletePersonAlert: Bool = false
     @State private var folderListResetToken = UUID()
     @FocusState private var destinationFieldFocused: Bool
 
@@ -19,6 +25,18 @@ struct ContentView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
+                        // Modes
+                        Picker("Mode", selection: Binding(
+                            get: { model.appMode },
+                            set: { model.setAppMode($0) }
+                        )) {
+                            ForEach(AppModel.AppMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        // Folder actions
                         HStack(spacing: 8) {
                             Button {
                                 model.chooseFolderInteractive()
@@ -49,113 +67,62 @@ struct ContentView: View {
                             }
                             .help("Reopen a recently used source folder")
 
-                            Menu {
-                                if model.recentDestinationDirectories.isEmpty {
-                                    Text("No Recent Destinations")
-                                } else {
-                                    ForEach(model.recentDestinationDirectories, id: \.self) { path in
-                                        Button {
-                                            model.openRecentDestination(path: path)
-                                        } label: {
-                                            if path == model.destinationDirectoryOverride?.path {
-                                                Label(path, systemImage: "checkmark")
-                                            } else {
-                                                Text(path)
+                            if model.appMode == .manual || model.appMode == .autoSort {
+                                Menu {
+                                    if model.recentDestinationDirectories.isEmpty {
+                                        Text("No Recent Destinations")
+                                    } else {
+                                        ForEach(model.recentDestinationDirectories, id: \.self) { path in
+                                            Button {
+                                                model.openRecentDestination(path: path)
+                                            } label: {
+                                                if path == model.destinationDirectoryOverride?.path {
+                                                    Label(path, systemImage: "checkmark")
+                                                } else {
+                                                    Text(path)
+                                                }
                                             }
+                                            .disabled(path == model.destinationDirectoryOverride?.path)
                                         }
-                                        .disabled(path == model.destinationDirectoryOverride?.path)
                                     }
+                                } label: {
+                                    Label("Recent Destinations", systemImage: "tray.full")
                                 }
-                            } label: {
-                                Label("Recent Destinations", systemImage: "tray.full")
+                                .help("Reuse a recently used destination folder")
                             }
-                            .help("Reuse a recently used destination folder")
 
                             Spacer(minLength: 0)
                         }
 
                         HStack(spacing: 8) {
-                            Button("Set Destination…") {
-                                model.chooseDestinationInteractive()
-                            }
-                            .help("Choose a destination folder different from the source")
-
-                            Button("Use Source") {
-                                model.clearDestinationOverride()
-                            }
-                            .disabled(!model.hasDestinationOverride)
-                            .help("Reset destination to the current source folder")
-
-                            Text(model.hasDestinationOverride ? "Destination: \(model.destinationSummary)" : "Destination: Source folder")
+                            Text("Source: \(model.currentDirectory?.path ?? "No folder selected")")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-
-                        Divider()
-
-                        Text(model.progressLine)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-
-                        HStack(spacing: 8) {
-                            if let icon = model.currentFileIcon {
-                                Image(nsImage: icon)
-                                    .resizable()
-                                    .interpolation(.high)
-                                    .frame(width: 18, height: 18)
-                            } else {
-                                Image(systemName: "doc")
-                                    .frame(width: 18, height: 18)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Text(model.currentFile?.lastPathComponent ?? "No active file")
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                         }
 
-                        if !model.currentFileMetadataLine.isEmpty {
-                            Text(model.currentFileMetadataLine)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Sources")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-
-                            if model.isLoadingCurrentFileSources {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    sourceSkeletonRow(width: 210)
-                                    sourceSkeletonRow(width: 170)
+                        if model.appMode == .manual || model.appMode == .autoSort {
+                            HStack(spacing: 8) {
+                                Button("Set Destination…") {
+                                    model.chooseDestinationInteractive()
                                 }
-                                .accessibilityLabel("Loading source links")
-                            } else if !model.currentFileSourceURLs.isEmpty {
-                                ForEach(model.currentFileSourceURLs, id: \.self) { source in
-                                    Button {
-                                        model.openExternalURL(source)
-                                    } label: {
-                                        Label(sourceLabel(for: source), systemImage: "arrow.up.right.square")
-                                            .font(.callout)
-                                            .underline()
-                                            .foregroundStyle(.blue)
-                                            .lineLimit(1)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Open source link in your browser")
+                                .help("Choose a destination folder different from the source")
+
+                                Button("Use Source") {
+                                    model.clearDestinationOverride()
                                 }
-                            } else {
-                                Text("No source links available")
+                                .disabled(!model.hasDestinationOverride)
+                                .help("Reset destination to the current source folder")
+
+                                Text(model.hasDestinationOverride ? "Destination: \(model.destinationSummary)" : "Destination: Source folder")
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
                         }
-                        .frame(height: 78, alignment: .topLeading)
 
+                        // Toggles
                         HStack(spacing: 12) {
                             Toggle("Recursive", isOn: Binding(
                                 get: { model.recursive },
@@ -163,115 +130,456 @@ struct ContentView: View {
                             ))
                             .toggleStyle(.switch)
 
-                            Toggle("Remove Duplicates", isOn: Binding(
-                                get: { model.removeDuplicatesAutomatically },
-                                set: { model.setRemoveDuplicatesAutomatically($0) }
-                            ))
-                            .toggleStyle(.switch)
+                            if model.appMode == .manual || model.appMode == .autoSort {
+                                Toggle("Remove Duplicates", isOn: Binding(
+                                    get: { model.removeDuplicatesAutomatically },
+                                    set: { model.setRemoveDuplicatesAutomatically($0) }
+                                ))
+                                .toggleStyle(.switch)
+                            }
                         }
 
-                        VStack(alignment: .leading, spacing: 6) {
-                            TextField("Destination folder (type to filter or create)", text: $model.folderQuery)
-                                .textFieldStyle(.roundedBorder)
-                                .focused($destinationFieldFocused)
-                                .onSubmit {
-                                    performMoveAction()
+                        // Mode actions
+                        if model.appMode == .autoSort {
+                            HStack(spacing: 10) {
+                                Button(model.isAutoSorting ? "Stop Auto Sort" : "Start Auto Sort") {
+                                    if model.isAutoSorting {
+                                        model.stopAutoSort()
+                                    } else {
+                                        model.startAutoSort()
+                                    }
                                 }
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                if !model.currentFolderSuggestionHint.isEmpty,
-                                   let suggestedFolder = model.currentSuggestedFolder {
-                                    Button {
-                                        model.folderQuery = suggestedFolder
-                                        model.selectedFolder = suggestedFolder
-                                        pendingCreateFolder = nil
-                                    } label: {
-                                        Label(model.currentFolderSuggestionHint, systemImage: "sparkles")
+                                Text("Threshold: \(Int((model.autoSortConfidenceThreshold * 100).rounded()))%")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+
+                                Spacer(minLength: 0)
+                            }
+                        } else if model.appMode == .duplicateFinder || model.appMode == .similarityFinder {
+                            HStack(spacing: 10) {
+                                if model.isDuplicateScanning {
+                                    Button(model.isDuplicateScanPaused ? "Resume Scan" : "Pause Scan") {
+                                        if model.isDuplicateScanPaused {
+                                            model.resumeDuplicateScan()
+                                        } else {
+                                            model.pauseDuplicateScan()
+                                        }
+                                    }
+
+                                    Button("Restart Scan") {
+                                        model.restartDuplicateScan()
+                                    }
+
+                                    Button("Stop Scan") {
+                                        model.stopDuplicateScan()
+                                    }
+                                } else {
+                                    Button(model.appMode == .similarityFinder ? "Start People Scan" : "Start Duplicate Scan") {
+                                        model.startDuplicateScan()
+                                    }
+                                }
+
+                                Text(model.appMode == .similarityFinder ? "Finds face + visual match batches to tag and review by person" : "Finds exact hash matches + visual similarity candidates")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+
+                                Spacer(minLength: 0)
+                            }
+                        }
+
+                        // File info (manual mode only)
+                        if model.appMode == .manual {
+                            Text(model.progressLine)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+
+                            HStack(spacing: 8) {
+                                if let icon = model.currentFileIcon {
+                                    Image(nsImage: icon)
+                                        .resizable()
+                                        .interpolation(.high)
+                                        .frame(width: 18, height: 18)
+                                } else {
+                                    Image(systemName: "doc")
+                                        .frame(width: 18, height: 18)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Text(model.currentFile?.lastPathComponent ?? "No active file")
+                                    .lineLimit(1)
+                                    .contextMenu {
+                                        if let name = model.currentFile?.lastPathComponent {
+                                            Button("Copy Filename") {
+                                                copyToPasteboard(name)
+                                            }
+                                        }
+                                        if let path = model.currentFile?.path {
+                                            Button("Copy File Path") {
+                                                copyToPasteboard(path)
+                                            }
+                                        }
+                                    }
+                                Spacer(minLength: 0)
+                            }
+
+                            if !model.currentFileMetadataLine.isEmpty {
+                                Text(model.currentFileMetadataLine)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                    .contextMenu {
+                                        Button("Copy File Info") {
+                                            copyToPasteboard(model.currentFileMetadataLine)
+                                        }
+                                    }
+                            }
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Sources")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+
+                                if model.isLoadingCurrentFileSources {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        sourceSkeletonRow(width: 210)
+                                        sourceSkeletonRow(width: 170)
+                                    }
+                                    .accessibilityLabel("Loading source links")
+                                } else if !model.currentFileSourceURLs.isEmpty {
+                                    ForEach(model.currentFileSourceURLs, id: \.self) { source in
+                                        Button {
+                                            model.openExternalURL(source)
+                                        } label: {
+                                            Label(sourceLabel(for: source), systemImage: "arrow.up.right.square")
+                                                .font(.callout)
+                                                .underline()
+                                                .foregroundStyle(.blue)
+                                                .lineLimit(1)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Open source link in your browser")
+                                    }
+                                } else {
+                                    Text("No source links available")
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(height: 78, alignment: .topLeading)
+
+                            if model.canTagCurrentFileAsPerson {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("People Tags")
+                                        .font(.headline)
+
+                                    if let suggested = model.currentSuggestedFolder,
+                                       !suggested.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        Button {
+                                            applySuggestedFolderSelection()
+                                        } label: {
+                                            Label("Use Suggested Folder: \(suggested)", systemImage: "sparkles")
+                                                .font(.callout)
+                                        }
+                                        .buttonStyle(.bordered)
+                                    }
+
+                                    if model.currentFileTaggedPeople.isEmpty {
+                                        Text("No people tagged for this file")
+                                            .font(.callout)
+                                            .foregroundStyle(.secondary)
+                                    } else {
+                                        ScrollView(.horizontal, showsIndicators: false) {
+                                            HStack(spacing: 6) {
+                                                ForEach(model.currentFileTaggedPeople, id: \.self) { person in
+                                                    HStack(spacing: 4) {
+                                                        Label(person, systemImage: "tag.fill")
+                                                            .font(.caption)
+                                                            .foregroundStyle(.secondary)
+                                                        Button {
+                                                            model.untagCurrentFilePerson(personName: person)
+                                                        } label: {
+                                                            Image(systemName: "xmark.circle.fill")
+                                                                .font(.caption)
+                                                        }
+                                                        .buttonStyle(.plain)
+                                                    }
+                                                    .padding(.horizontal, 8)
+                                                    .padding(.vertical, 4)
+                                                    .background(
+                                                        Capsule(style: .continuous)
+                                                            .fill(Color.accentColor.opacity(0.16))
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    HStack(spacing: 8) {
+                                        TextField("Tag person", text: $manualPersonTagInput)
+                                            .textFieldStyle(.roundedBorder)
+                                            .onSubmit {
+                                                submitManualPersonTag()
+                                            }
+
+                                        Button("Tag") {
+                                            submitManualPersonTag()
+                                        }
+                                        .disabled(manualPersonTagInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                    }
+
+                                    if !manualPersonSuggestions.isEmpty {
+                                        ScrollView(.horizontal, showsIndicators: false) {
+                                            HStack(spacing: 6) {
+                                                ForEach(manualPersonSuggestions, id: \.self) { person in
+                                                    Button(person) {
+                                                        manualPersonTagInput = person
+                                                        submitManualPersonTag()
+                                                    }
+                                                    .buttonStyle(.bordered)
+                                                    .controlSize(.small)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if model.appMode == .manual {
+                            // Folder list
+                            VStack(alignment: .leading, spacing: 6) {
+                                TextField("Destination folder (type to filter or create)", text: $model.folderQuery)
+                                    .textFieldStyle(.roundedBorder)
+                                    .focused($destinationFieldFocused)
+                                    .onSubmit {
+                                        performMoveAction()
+                                    }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    if !model.currentFolderSuggestionHint.isEmpty,
+                                       let suggestedFolder = model.currentSuggestedFolder {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Button {
+                                                model.folderQuery = suggestedFolder
+                                                model.selectedFolder = suggestedFolder
+                                                pendingCreateFolder = nil
+                                            } label: {
+                                                Label(model.currentFolderSuggestionHint, systemImage: "sparkles")
+                                                    .font(.callout)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .help("Apply suggested folder: \(suggestedFolder)")
+
+                                            if !model.currentFolderSuggestionSourceDetail.isEmpty {
+                                                Text(model.currentFolderSuggestionSourceDetail)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+
+                                    if let pendingCreateFolder {
+                                        Text("Creating: \"\(pendingCreateFolder)\" (Enter to move)")
+                                            .font(.callout)
+                                            .foregroundStyle(.secondary)
+                                    } else if let newFolderName = newFolderCandidate() {
+                                        Text("Press Tab to queue creating \"\(newFolderName)\"")
                                             .font(.callout)
                                             .foregroundStyle(.secondary)
                                     }
-                                    .buttonStyle(.plain)
-                                    .help("Apply suggested folder: \(suggestedFolder)")
                                 }
-
-                                if let pendingCreateFolder {
-                                    Text("Creating: \"\(pendingCreateFolder)\" (Enter to move)")
-                                        .font(.callout)
-                                        .foregroundStyle(.secondary)
-                                } else if let newFolderName = newFolderCandidate() {
-                                    Text("Press Tab to queue creating \"\(newFolderName)\"")
-                                        .font(.callout)
-                                        .foregroundStyle(.secondary)
-                                }
+                                .frame(minHeight: 44, alignment: .topLeading)
                             }
-                            .frame(minHeight: 44, alignment: .topLeading)
-                        }
 
-                        List {
-                            if let newFolderName = newFolderCandidate() {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "plus.circle")
-                                        .frame(width: 16, height: 16)
-                                        .foregroundStyle(.tint)
-                                    Text("Create \"\(newFolderName)\"")
+                            List {
+                                if let newFolderName = newFolderCandidate() {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "plus.circle")
+                                            .frame(width: 16, height: 16)
+                                            .foregroundStyle(.tint)
+                                        Text("Create \"\(newFolderName)\"")
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        DispatchQueue.main.async {
+                                            model.folderQuery = newFolderName
+                                            pendingCreateFolder = newFolderName
+                                            model.selectedFolder = newFolderName
+                                        }
+                                    }
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                                    .listRowSeparator(.hidden)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    DispatchQueue.main.async {
-                                        model.folderQuery = newFolderName
-                                        pendingCreateFolder = newFolderName
-                                        model.selectedFolder = newFolderName
+
+                                if let pinned = pinnedFolder,
+                                   displayedFolders.contains(where: { $0.caseInsensitiveCompare(pinned) == .orderedSame }) {
+                                    folderRow(for: pinned)
+
+                                    if !remainingFolders.isEmpty {
+                                        Divider()
+                                            .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
+                                            .listRowSeparator(.hidden)
                                     }
                                 }
-                                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                                .listRowSeparator(.hidden)
-                            }
 
-                            if let pinned = pinnedFolder,
-                               displayedFolders.contains(where: { $0.caseInsensitiveCompare(pinned) == .orderedSame }) {
-                                folderRow(for: pinned)
-
-                                if !remainingFolders.isEmpty {
-                                    Divider()
-                                        .listRowInsets(EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10))
-                                        .listRowSeparator(.hidden)
+                                ForEach(remainingFolders, id: \.self) { folder in
+                                    folderRow(for: folder)
                                 }
                             }
+                            .id(folderListResetToken)
+                            .listStyle(.plain)
+                            .padding(.top, 2)
+                            .frame(minHeight: 260)
 
-                            ForEach(remainingFolders, id: \.self) { folder in
-                                folderRow(for: folder)
+                            // File actions
+                            HStack {
+                                Button {
+                                    performMoveAction()
+                                } label: {
+                                    Label("Move", systemImage: "folder.badge.plus")
+                                }
+                                .keyboardShortcut(.defaultAction)
+
+                                Button {
+                                    model.skipCurrent()
+                                } label: {
+                                    Label("Next", systemImage: "arrow.right")
+                                }
+
+                                Button {
+                                    model.goBack()
+                                } label: {
+                                    Label("Undo", systemImage: "arrow.uturn.backward")
+                                }
+                                .disabled(!model.canUndo)
+                            }
+                        } else if model.appMode == .similarityFinder {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("People")
+                                    .font(.headline)
+
+                                HStack(spacing: 8) {
+                                    TextField("Add person", text: $newPersonName)
+                                        .textFieldStyle(.roundedBorder)
+                                        .onSubmit {
+                                            let trimmed = newPersonName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                            guard !trimmed.isEmpty else { return }
+                                            _ = model.addTrackedPerson(trimmed)
+                                            newPersonName = ""
+                                        }
+
+                                    Button("Add") {
+                                        let trimmed = newPersonName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        guard !trimmed.isEmpty else { return }
+                                        _ = model.addTrackedPerson(trimmed)
+                                        newPersonName = ""
+                                    }
+                                    .disabled(newPersonName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                                    Button("Undo Delete") {
+                                        model.undoLastDeletedPerson()
+                                    }
+                                    .disabled(!model.canUndoDeletedPerson)
+
+                                    Button(model.isDuplicateScanning ? "Scanning…" : "Re-Scan") {
+                                        model.restartDuplicateScan()
+                                    }
+                                    .disabled(model.isDuplicateScanning || model.currentDirectory == nil)
+
+                                    if let focusedPerson = model.focusedPersonSearchName,
+                                       !focusedPerson.isEmpty {
+                                        Button("All People") {
+                                            model.clearFocusedPersonSearch()
+                                        }
+                                        .disabled(model.isDuplicateScanning || model.currentDirectory == nil)
+                                    }
+                                }
+
+                                if let focusedPerson = model.focusedPersonSearchName,
+                                   !focusedPerson.isEmpty {
+                                    Text("Searching current folder for: \(focusedPerson)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                List {
+                                    if model.trackedPeople.isEmpty {
+                                        Text("No people tracked yet")
+                                            .foregroundStyle(.secondary)
+                                    } else {
+                                        ForEach(model.trackedPeople, id: \.self) { person in
+                                            HStack(spacing: 8) {
+                                                Image(systemName: "person.crop.circle")
+                                                    .foregroundStyle(.secondary)
+                                                if editingPersonName?.caseInsensitiveCompare(person) == .orderedSame {
+                                                    TextField("Person name", text: $editingPersonValue)
+                                                        .textFieldStyle(.roundedBorder)
+                                                        .onSubmit {
+                                                            model.renameTrackedPerson(oldName: person, newRawName: editingPersonValue)
+                                                            editingPersonName = nil
+                                                            editingPersonValue = ""
+                                                        }
+                                                } else {
+                                                    Button {
+                                                        model.runFocusedPersonSearch(person)
+                                                    } label: {
+                                                        HStack(spacing: 6) {
+                                                            Text(person)
+                                                            Image(systemName: "magnifyingglass")
+                                                                .font(.caption)
+                                                                .foregroundStyle(.secondary)
+                                                        }
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                    .help("Search current folder for possible matches for \(person)")
+                                                }
+                                                Spacer(minLength: 0)
+                                                if editingPersonName?.caseInsensitiveCompare(person) == .orderedSame {
+                                                    Button("Save") {
+                                                        model.renameTrackedPerson(oldName: person, newRawName: editingPersonValue)
+                                                        editingPersonName = nil
+                                                        editingPersonValue = ""
+                                                    }
+                                                    .buttonStyle(.borderless)
+
+                                                    Button("Cancel") {
+                                                        editingPersonName = nil
+                                                        editingPersonValue = ""
+                                                    }
+                                                    .buttonStyle(.borderless)
+                                                } else {
+                                                    Button {
+                                                        editingPersonName = person
+                                                        editingPersonValue = person
+                                                    } label: {
+                                                        Image(systemName: "pencil")
+                                                    }
+                                                    .buttonStyle(.borderless)
+                                                }
+                                                Button(role: .destructive) {
+                                                    pendingDeletePersonName = person
+                                                    showDeletePersonAlert = true
+                                                } label: {
+                                                    Image(systemName: "trash")
+                                                }
+                                                .buttonStyle(.borderless)
+                                            }
+                                        }
+                                    }
+                                }
+                                .listStyle(.plain)
+                                .frame(minHeight: 250)
                             }
                         }
-                        .id(folderListResetToken)
-                        .listStyle(.plain)
-                        .padding(.top, 2)
-                        .frame(minHeight: 260)
 
-                        HStack {
-                            Button {
-                                performMoveAction()
-                            } label: {
-                                Label("Move", systemImage: "folder.badge.plus")
-                            }
-                            .keyboardShortcut(.defaultAction)
-
-                            Button {
-                                model.skipCurrent()
-                            } label: {
-                                Label("Next", systemImage: "arrow.right")
-                            }
-
-                            Button {
-                                model.goBack()
-                            } label: {
-                                Label("Undo", systemImage: "arrow.uturn.backward")
-                            }
-                            .disabled(!model.canUndo)
-                        }
-
+                        // Recent activity
                         Divider()
 
                         statusPanel
@@ -344,6 +652,7 @@ struct ContentView: View {
                 }
             }
         }
+        .textSelection(.enabled)
         .onAppear {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
@@ -355,17 +664,65 @@ struct ContentView: View {
         }
         .onChange(of: model.currentFile?.path ?? "") { _, _ in
             folderListResetToken = UUID()
+            manualPersonTagInput = ""
         }
         .onDisappear {
             removeKeyMonitor()
+        }
+        .alert("Delete Person?", isPresented: $showDeletePersonAlert, presenting: pendingDeletePersonName) { person in
+            Button("Cancel", role: .cancel) {
+                pendingDeletePersonName = nil
+            }
+            Button("Delete", role: .destructive) {
+                if editingPersonName?.caseInsensitiveCompare(person) == .orderedSame {
+                    editingPersonName = nil
+                    editingPersonValue = ""
+                }
+                model.removeTrackedPerson(person)
+                pendingDeletePersonName = nil
+            }
+        } message: { person in
+            Text("Delete \(person) from tracked people? This also removes their learned match data.")
         }
     }
 
     private func installKeyMonitorIfNeeded() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let modifiers = normalizedModifiers(for: event)
+
+            if event.keyCode == 53 {
+                if modifiers.isEmpty, model.currentDirectory != nil {
+                    model.closeCurrentSession()
+                    return nil
+                }
+            }
+
+                if (model.appMode == .duplicateFinder || model.appMode == .similarityFinder),
+               model.duplicateScanReport != nil,
+               modifiers.isEmpty {
+                if let firstResponder = NSApp.keyWindow?.firstResponder,
+                   firstResponder is NSTextView {
+                    return event
+                }
+
+                if event.keyCode == 123 || event.keyCode == 124 {
+                    model.moveDuplicateGroupSelection(direction: event.keyCode == 124 ? 1 : -1)
+                    return nil
+                }
+
+                if event.keyCode == 36 {
+                    model.applySelectedDuplicateResolution()
+                    return nil
+                }
+
+                if let number = numberForKeyCode(event.keyCode) {
+                    model.chooseDuplicateKeeperByNumber(number)
+                    return nil
+                }
+            }
+
             if event.keyCode == 48 {
-                let modifiers = normalizedModifiers(for: event)
                 if modifiers.isEmpty,
                    destinationFieldFocused,
                    let create = newFolderCandidate() {
@@ -377,7 +734,6 @@ struct ContentView: View {
             }
 
             if event.keyCode == 125 || event.keyCode == 126 {
-                let modifiers = normalizedModifiers(for: event)
                 if modifiers.isEmpty {
                     if moveFolderSelection(direction: event.keyCode == 125 ? 1 : -1) {
                         return nil
@@ -394,7 +750,6 @@ struct ContentView: View {
             }
 
             if event.keyCode == 115 || event.keyCode == 119 {
-                let modifiers = normalizedModifiers(for: event)
                 if modifiers.isEmpty {
                     if moveFolderSelectionToBoundary(atStart: event.keyCode == 115) {
                         return nil
@@ -404,7 +759,6 @@ struct ContentView: View {
             }
 
             if event.keyCode == 116 || event.keyCode == 121 {
-                let modifiers = normalizedModifiers(for: event)
                 if modifiers.isEmpty {
                     if moveFolderSelectionByPage(direction: event.keyCode == 121 ? 1 : -1) {
                         return nil
@@ -415,7 +769,6 @@ struct ContentView: View {
 
             if event.keyCode != 49 { return event }
 
-            let modifiers = normalizedModifiers(for: event)
             if !modifiers.isEmpty { return event }
 
             if let firstResponder = NSApp.keyWindow?.firstResponder,
@@ -425,6 +778,21 @@ struct ContentView: View {
 
             applyPlaybackToggleStatus()
             return nil
+        }
+    }
+
+    private func numberForKeyCode(_ keyCode: UInt16) -> Int? {
+        switch keyCode {
+        case 18: return 1
+        case 19: return 2
+        case 20: return 3
+        case 21: return 4
+        case 23: return 5
+        case 22: return 6
+        case 26: return 7
+        case 28: return 8
+        case 25: return 9
+        default: return nil
         }
     }
 
@@ -555,8 +923,17 @@ struct ContentView: View {
         return remaining.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
+    private var navigableFolders: [String] {
+        if let pinned = pinnedFolder {
+            return [pinned] + remainingFolders
+        }
+        return remainingFolders
+    }
+
     private func folderRow(for folder: String) -> some View {
-        HStack(spacing: 8) {
+        let isSelected = model.selectedFolder.map { $0.caseInsensitiveCompare(folder) == .orderedSame } ?? false
+
+        return HStack(spacing: 8) {
             if let icon = folderIcon(for: folder) {
                 Image(nsImage: icon)
                     .resizable()
@@ -575,9 +952,9 @@ struct ContentView: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(folder == model.selectedFolder ? Color(nsColor: .selectedContentBackgroundColor) : Color.clear)
+                .fill(isSelected ? Color(nsColor: .selectedContentBackgroundColor) : Color.clear)
         )
-        .foregroundStyle(folder == model.selectedFolder ? Color(nsColor: .selectedTextColor) : Color.primary)
+        .foregroundStyle(isSelected ? Color(nsColor: .selectedTextColor) : Color.primary)
         .contentShape(Rectangle())
         .onTapGesture {
             DispatchQueue.main.async {
@@ -663,16 +1040,42 @@ struct ContentView: View {
         }
     }
 
+    private func autoSortOutcomeIcon(for outcome: AppModel.AutoSortItemOutcome) -> String {
+        switch outcome {
+        case .moved:
+            return "folder.badge.plus"
+        case .duplicate:
+            return "doc.on.doc"
+        case .renamed:
+            return "pencil"
+        case .needsReview:
+            return "exclamationmark.triangle"
+        case .failed:
+            return "xmark.octagon"
+        }
+    }
+
+    private func autoSortOutcomeColor(for outcome: AppModel.AutoSortItemOutcome) -> Color {
+        switch outcome {
+        case .moved, .duplicate, .renamed:
+            return Color(nsColor: .systemGreen)
+        case .needsReview:
+            return Color(nsColor: .systemOrange)
+        case .failed:
+            return Color(nsColor: .systemRed)
+        }
+    }
+
     private func moveFolderSelection(direction: Int) -> Bool {
-        let ranked = model.rankedFolders()
-        guard !ranked.isEmpty else { return false }
+        let navigable = navigableFolders
+        guard !navigable.isEmpty else { return false }
 
         if let selected = model.selectedFolder,
-           let currentIndex = ranked.firstIndex(where: { $0.caseInsensitiveCompare(selected) == .orderedSame }) {
-            let nextIndex = max(0, min(ranked.count - 1, currentIndex + direction))
-            model.selectedFolder = ranked[nextIndex]
+           let currentIndex = navigable.firstIndex(where: { $0.caseInsensitiveCompare(selected) == .orderedSame }) {
+            let nextIndex = max(0, min(navigable.count - 1, currentIndex + direction))
+            model.selectedFolder = navigable[nextIndex]
         } else {
-            model.selectedFolder = direction >= 0 ? ranked.first : ranked.last
+            model.selectedFolder = direction >= 0 ? navigable.first : navigable.last
         }
 
         pendingCreateFolder = nil
@@ -680,29 +1083,29 @@ struct ContentView: View {
     }
 
     private func moveFolderSelectionToBoundary(atStart: Bool) -> Bool {
-        let ranked = model.rankedFolders()
-        guard !ranked.isEmpty else { return false }
-        model.selectedFolder = atStart ? ranked.first : ranked.last
+        let navigable = navigableFolders
+        guard !navigable.isEmpty else { return false }
+        model.selectedFolder = atStart ? navigable.first : navigable.last
         pendingCreateFolder = nil
         return true
     }
 
     private func moveFolderSelectionByPage(direction: Int) -> Bool {
-        let ranked = model.rankedFolders()
-        guard !ranked.isEmpty else { return false }
+        let navigable = navigableFolders
+        guard !navigable.isEmpty else { return false }
 
         let pageStep = 8
         let currentIndex: Int
 
         if let selected = model.selectedFolder,
-           let found = ranked.firstIndex(where: { $0.caseInsensitiveCompare(selected) == .orderedSame }) {
+           let found = navigable.firstIndex(where: { $0.caseInsensitiveCompare(selected) == .orderedSame }) {
             currentIndex = found
         } else {
-            currentIndex = direction >= 0 ? 0 : ranked.count - 1
+            currentIndex = direction >= 0 ? 0 : navigable.count - 1
         }
 
-        let nextIndex = max(0, min(ranked.count - 1, currentIndex + (pageStep * direction)))
-        model.selectedFolder = ranked[nextIndex]
+        let nextIndex = max(0, min(navigable.count - 1, currentIndex + (pageStep * direction)))
+        model.selectedFolder = navigable[nextIndex]
         pendingCreateFolder = nil
         return true
     }
@@ -711,5 +1114,53 @@ struct ContentView: View {
         event.modifierFlags
             .intersection(.deviceIndependentFlagsMask)
             .subtracting([.capsLock, .numericPad, .function])
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    private var manualPersonSuggestions: [String] {
+        let currentTags = Set(model.currentFileTaggedPeople.map { $0.lowercased() })
+        let input = manualPersonTagInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        return model.trackedPeople.filter { person in
+            !currentTags.contains(person.lowercased()) && (input.isEmpty || person.lowercased().contains(input))
+        }
+    }
+
+    private func submitManualPersonTag() {
+        let trimmed = manualPersonTagInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if model.tagCurrentFileAsPerson(rawPersonName: trimmed) {
+            manualPersonTagInput = ""
+            if shouldAutoApplyPersonTagSuggestion {
+                applySuggestedFolderSelection()
+            }
+        }
+    }
+
+    private var shouldAutoApplyPersonTagSuggestion: Bool {
+        guard let suggested = model.currentSuggestedFolder,
+              !suggested.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return false }
+
+        return model.currentFolderSuggestionSourceDetail.localizedCaseInsensitiveContains("tagged people")
+    }
+
+    private func applySuggestedFolderSelection() {
+        guard let suggested = model.currentSuggestedFolder?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !suggested.isEmpty
+        else { return }
+
+        model.folderQuery = suggested
+        model.selectedFolder = suggested
+
+        let exists = model.folders.contains { folder in
+            folder.caseInsensitiveCompare(suggested) == .orderedSame
+        }
+        pendingCreateFolder = exists ? nil : suggested
     }
 }

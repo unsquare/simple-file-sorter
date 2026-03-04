@@ -10,6 +10,14 @@ Native macOS rewrite scaffold using SwiftUI/AppKit conventions.
 - Recursive toggle
 - Recent source folders menu (last 5), select to reopen
 - Recent destination folders menu (last 5), select to reuse destination override
+- People mode for face/similarity batches:
+  - tag individual photos/videos with a person name
+  - tag per-card during person review (alongside Yes/No quick review)
+  - track/delete known people in sidebar
+  - click a person in sidebar to search the current folder for likely matches for that person
+  - get person-specific likely-match batches after tagging, weighted toward face matches
+  - always includes unassigned review batches (clustered when possible) so unmatched files can still be reviewed and tagged
+  - one-click batch tagging for non-review People batches
 - Native `Recent Sources` and `Recent Destinations` command menus
 - No automatic reopen of last folder on launch
 - Destination override supported (sort into folder different from source)
@@ -59,6 +67,9 @@ Native macOS rewrite scaffold using SwiftUI/AppKit conventions.
 The app writes config outside the repo to:
 
 - `~/Library/Application Support/File Sorter Swift/config.json`
+- `~/Library/Application Support/File Sorter Swift/people-recognition.sqlite`
+
+People recognition memory now uses SQLite. On first launch after this change, any legacy people data found in `config.json` is imported into `people-recognition.sqlite`, then removed from future JSON writes.
 
 This is not part of git commits in this workspace.
 
@@ -103,4 +114,5 @@ The app includes a native macOS Settings window (standard app Settings scene):
 - seek step seconds
 - browser app/private settings
   - browser chooser supports `System Default` + detected installed apps
+- people recognition controls
 - recent source/destination management

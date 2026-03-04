@@ -14,9 +14,36 @@ struct SettingsView: View {
                     set: { model.setRecursive($0) }
                 ))
 
+                Picker("Default mode", selection: Binding(
+                    get: { model.appMode },
+                    set: { model.setAppMode($0) }
+                )) {
+                    ForEach(AppModel.AppMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+
                 Toggle("Default: remove duplicates automatically", isOn: Binding(
                     get: { model.defaultRemoveDuplicatesAutomatically },
                     set: { model.setDefaultRemoveDuplicatesAutomatically($0) }
+                ))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Auto-sort confidence: \(Int((model.autoSortConfidenceThreshold * 100).rounded()))%")
+                    Slider(value: Binding(
+                        get: { model.autoSortConfidenceThreshold },
+                        set: { model.setAutoSortConfidenceThreshold($0) }
+                    ), in: 0.5...0.99, step: 0.01)
+                }
+
+                Toggle("Auto-create folders from high-confidence usernames", isOn: Binding(
+                    get: { model.autoCreateUsernameFoldersEnabled },
+                    set: { model.setAutoCreateUsernameFoldersEnabled($0) }
+                ))
+
+                Toggle("Duplicate preview autoplay", isOn: Binding(
+                    get: { model.duplicatePreviewAutoplayEnabled },
+                    set: { model.setDuplicatePreviewAutoplayEnabled($0) }
                 ))
 
                 Stepper(value: Binding(
@@ -24,6 +51,19 @@ struct SettingsView: View {
                     set: { model.setSeekSeconds($0) }
                 ), in: 1...120, step: 1) {
                     Text("Seek step: \(Int(model.seekSeconds)) seconds")
+                }
+            }
+
+            Section("People Recognition") {
+                Text("Tracked people: \(model.trackedPeople.count)")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                Stepper(value: Binding(
+                    get: { model.largeBatchTagConfirmationThreshold },
+                    set: { model.setLargeBatchTagConfirmationThreshold($0) }
+                ), in: 10...1000, step: 10) {
+                    Text("Confirm batch tagging at: \(model.largeBatchTagConfirmationThreshold) files")
                 }
             }
 

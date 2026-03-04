@@ -12,7 +12,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "FileSorterMac",
-            path: "Sources/FileSorterMac"
+            path: "Sources/FileSorterMac",
+            linkerSettings: [
+                .linkedLibrary("sqlite3")
+            ]
         )
     ]
 )
